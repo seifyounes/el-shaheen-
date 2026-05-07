@@ -1,80 +1,111 @@
 // ============================================================
-// AL-SHAHEEN — Site interactions + AR/EN language toggle
+// AL-SHAHEEN — interactions, animations, AR/EN language toggle
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", () => {
+  autoApplyReveals();
   initLanguage();
   initMobileNav();
   initContactForm();
+  initRevealAnimations();
+  initHeaderScroll();
+  initScrollTopButton();
 });
+
+// ----- AUTO-APPLY REVEAL CLASSES -------------------------------
+function autoApplyReveals() {
+  document.querySelectorAll(".grid, .steps").forEach(p => {
+    if (!p.classList.contains("stagger")) p.classList.add("stagger");
+  });
+  const sel = [
+    "section .section-head",
+    "section .grid > *",
+    "section .steps > *",
+    "section .split > *",
+    "section .contact-grid > *",
+    ".cta-strip h2",
+    ".cta-strip p",
+    ".cta-strip .btn",
+  ].join(",");
+  document.querySelectorAll(sel).forEach(el => {
+    if (!el.classList.contains("reveal") && !el.classList.contains("no-reveal")) {
+      el.classList.add("reveal");
+    }
+  });
+}
 
 // ----- LANGUAGE TOGGLE -----------------------------------------
 function initLanguage() {
-  // Cache the original (Arabic) HTML for every translatable element on first load.
   document.querySelectorAll("[data-en]").forEach(el => {
     if (!el.hasAttribute("data-ar")) {
       el.setAttribute("data-ar", el.innerHTML);
     }
   });
-  // Cache attributes (placeholder, title, alt, page <title>)
   document.querySelectorAll("[data-en-attr]").forEach(el => {
     const attr = el.getAttribute("data-en-attr");
     const enVal = el.getAttribute("data-en-value");
     const original = el.getAttribute(attr) || "";
     el.setAttribute("data-ar-value", original);
-    // store english fallback so we can swap
     if (!enVal) el.setAttribute("data-en-value", original);
   });
 
   const saved = localStorage.getItem("lang") || "ar";
-  setLanguage(saved);
+  setLanguage(saved, false);
 
   const btn = document.querySelector(".lang-toggle");
   if (btn) {
     btn.addEventListener("click", () => {
       const current = document.documentElement.lang || "ar";
-      setLanguage(current === "ar" ? "en" : "ar");
+      setLanguage(current === "ar" ? "en" : "ar", true);
     });
   }
 }
 
-function setLanguage(lang) {
+function setLanguage(lang, animated) {
   const html = document.documentElement;
-  html.lang = lang;
-  html.dir = lang === "ar" ? "rtl" : "ltr";
 
-  // Swap inner HTML for translatable elements
-  document.querySelectorAll("[data-en]").forEach(el => {
-    const ar = el.getAttribute("data-ar");
-    const en = el.getAttribute("data-en");
-    el.innerHTML = lang === "en" ? en : ar;
-  });
+  const apply = () => {
+    html.lang = lang;
+    html.dir = lang === "ar" ? "rtl" : "ltr";
 
-  // Swap attributes (placeholder/alt/title)
-  document.querySelectorAll("[data-en-attr]").forEach(el => {
-    const attr = el.getAttribute("data-en-attr");
-    const ar = el.getAttribute("data-ar-value");
-    const en = el.getAttribute("data-en-value");
-    if (attr) el.setAttribute(attr, lang === "en" ? en : ar);
-  });
+    document.querySelectorAll("[data-en]").forEach(el => {
+      const ar = el.getAttribute("data-ar");
+      const en = el.getAttribute("data-en");
+      el.innerHTML = lang === "en" ? en : ar;
+    });
 
-  // Page <title>
-  const titleEl = document.querySelector("title");
-  if (titleEl && titleEl.dataset.en) {
-    titleEl.textContent = lang === "en" ? titleEl.dataset.en : titleEl.dataset.ar || titleEl.textContent;
+    document.querySelectorAll("[data-en-attr]").forEach(el => {
+      const attr = el.getAttribute("data-en-attr");
+      const ar = el.getAttribute("data-ar-value");
+      const en = el.getAttribute("data-en-value");
+      if (attr) el.setAttribute(attr, lang === "en" ? en : ar);
+    });
+
+    const titleEl = document.querySelector("title");
+    if (titleEl && titleEl.dataset.en) {
+      titleEl.textContent = lang === "en" ? titleEl.dataset.en : titleEl.dataset.ar || titleEl.textContent;
+    }
+    const metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc && metaDesc.dataset.en) {
+      metaDesc.setAttribute("content", lang === "en" ? metaDesc.dataset.en : metaDesc.dataset.ar);
+    }
+    const btn = document.querySelector(".lang-toggle");
+    if (btn) btn.textContent = lang === "ar" ? "EN" : "AR";
+
+    localStorage.setItem("lang", lang);
+  };
+
+  if (animated) {
+    document.body.classList.add("switching");
+    setTimeout(() => {
+      apply();
+      requestAnimationFrame(() => {
+        document.body.classList.remove("switching");
+      });
+    }, 220);
+  } else {
+    apply();
   }
-
-  // Meta description
-  const metaDesc = document.querySelector('meta[name="description"]');
-  if (metaDesc && metaDesc.dataset.en) {
-    metaDesc.setAttribute("content", lang === "en" ? metaDesc.dataset.en : metaDesc.dataset.ar);
-  }
-
-  // Toggle button label: shows the OTHER language
-  const btn = document.querySelector(".lang-toggle");
-  if (btn) btn.textContent = lang === "ar" ? "EN" : "AR";
-
-  localStorage.setItem("lang", lang);
 }
 
 // ----- MOBILE NAV ----------------------------------------------
@@ -108,4 +139,63 @@ function initContactForm() {
     }
     form.reset();
   });
+}
+
+// ----- SCROLL REVEAL -------------------------------------------
+function initRevealAnimations() {
+  const elements = document.querySelectorAll(".reveal");
+  if (!elements.length) return;
+  if (!("IntersectionObserver" in window)) {
+    elements.forEach(el => el.classList.add("in-view"));
+    return;
+  }
+  const observer = new IntersectionObserver((entries, obs) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("in-view");
+        obs.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
+  elements.forEach(el => observer.observe(el));
+}
+
+// ----- HEADER SCROLL EFFECT ------------------------------------
+function initHeaderScroll() {
+  const header = document.querySelector(".header");
+  if (!header) return;
+  let ticking = false;
+  function update() {
+    if (window.scrollY > 12) header.classList.add("scrolled");
+    else header.classList.remove("scrolled");
+    ticking = false;
+  }
+  window.addEventListener("scroll", () => {
+    if (!ticking) {
+      requestAnimationFrame(update);
+      ticking = true;
+    }
+  }, { passive: true });
+}
+
+// ----- SCROLL-TO-TOP BUTTON ------------------------------------
+function initScrollTopButton() {
+  const btn = document.createElement("button");
+  btn.className = "scroll-top";
+  btn.setAttribute("aria-label", "Scroll to top");
+  btn.innerHTML = "↑";
+  btn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  document.body.appendChild(btn);
+
+  let ticking = false;
+  function update() {
+    btn.classList.toggle("show", window.scrollY > 600);
+    ticking = false;
+  }
+  window.addEventListener("scroll", () => {
+    if (!ticking) {
+      requestAnimationFrame(update);
+      ticking = true;
+    }
+  }, { passive: true });
 }
